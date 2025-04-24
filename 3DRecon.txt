@@ -1,0 +1,54 @@
+import bpy
+import bmesh
+import cv2
+import numpy as np
+
+
+mask_image_path = 'D:/your_path/mask.png'  # 修改为你的掩码图路径
+pixel_size = 0.01  # 每个像素对应的实际尺寸（单位：m）
+slice_interval = 0.01  # 切片间距（单位：m）
+
+
+mask = cv2.imread(mask_image_path, cv2.IMREAD_GRAYSCALE)
+height, width = mask.shape
+
+
+bpy.ops.object.select_all(action='SELECT')
+bpy.ops.object.delete(use_global=False)
+
+
+def create_circle(diameter, z_height, vertices=32):
+    bpy.ops.mesh.primitive_circle_add(
+        vertices=vertices,
+        radius=diameter / 2,
+        location=(0, 0, z_height)
+    )
+    return bpy.context.object
+
+circle_objects = []
+for row in range(height):
+    line = mask[row, :]
+    nonzero_indices = np.where(line > 0)[0]
+
+    if len(nonzero_indices) > 0:
+        left = nonzero_indices[0]
+        right = nonzero_indices[-1]
+        diameter_pixels = right - left + 1
+        diameter_meters = diameter_pixels * pixel_size
+        z_position = (height - row) * slice_interval  # Y轴向上
+
+        circle = create_circle(diameter_meters, z_position)
+        circle_objects.append(circle)
+
+for obj in circle_objects:
+    obj.select_set(True)
+bpy.context.view_layer.objects.active = circle_objects[0]
+bpy.ops.object.join()
+
+bpy.ops.object.convert(target='MESH')
+bpy.ops.object.modifier_add(type='SKIN')
+bpy.ops.object.modifier_add(type='SUBSURF')
+bpy.context.object.modifiers["Subdivision"].levels = 2
+bpy.ops.object.shade_smooth()
+
+print("3D reconstruction completed successfully.")
